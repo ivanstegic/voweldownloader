@@ -1,0 +1,8 @@
+{
+    "require": {
+        "symfony/http-client": "^6.2",
+        "nyholm/psr7": "^1.5",
+        "vlucas/phpdotenv": "^5.5",
+        "guzzlehttp/guzzle": "^7.5"
+    }
+}
