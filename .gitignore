@@ -1,0 +1,8 @@
+.idea
+.env
+*.log
+/app/vendor/*
+!/app/vendor/.gitkeep
+/app/media/*
+!/app/media/.gitkeep
+
