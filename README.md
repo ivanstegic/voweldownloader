@@ -12,7 +12,12 @@ This is a PHP 8 command line app that creates an executable bash script `vd.sh` 
 
 ## Configuration
 
-You will need to copy the `.env.example` file to `.env` and fill in the variables `VOWEL_SUBDOMAIN` and `COOKIE_VSC1_VALUE` -- more info on what these are is at https://ivn.st/vdvar
+You will need to copy the `.env.example` file to `.env` and fill in the variables `VOWEL_SUBDOMAIN` and `COOKIE_VSC1_VALUE` -- more info on where to find VSC1 is below:
+
+![Getting the value for VSC1](https://github.com/ivanstegic/voweldownloader/assets/509217/4a918ade-f65f-436b-9572-38034835f8fd)
+
+Be sure you are logged in when you're copying this value.
+
 
 
 ## Usage
