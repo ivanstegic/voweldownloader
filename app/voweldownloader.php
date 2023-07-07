@@ -31,10 +31,10 @@ $jar = \GuzzleHttp\Cookie\CookieJar::fromArray(
     $subdomain . '.vowel.com'
 );
 
-print("========================================================\n");
-print("Welcome to a hastily created Vowel Downloader v1 7/4/23\n");
-print("Using the account at https://$subdomain.vowel.com/\n");
-print("Looking...\n");
+echo "========================================================\n";
+echo "Welcome to a hastily created Vowel Downloader v1 7/4/23\n";
+echo "Using the account at https://$subdomain.vowel.com/\n";
+echo "Looking...\n";
 
 
 $downloadpath = getcwd() . "/media/";
@@ -46,11 +46,12 @@ $curlies = [];
 try {
 
     // get all the channels (folders) you have access to, use the cookie jar from earlier
+    echo "Getting all the channels...\n";
     $vd_client = new \GuzzleHttp\Client();
 
     $vd_response = $vd_client->request(
         'GET',
-        'https://' . $subdomain . '.vowel.com/api/channels/?size=1000',
+        'https://' . $subdomain . '.vowel.com/api/channels/?size=10000',
         [
             'cookies' => $jar
         ]
@@ -65,6 +66,8 @@ try {
         $channel_count = $vd_response_body->page->totalElements;
         echo "Found $channel_count channel folders, processing...\n";
         $i=1;
+
+        $channel_mediaids = [];
 
 
         // go through each channel please
@@ -98,16 +101,22 @@ try {
                     echo "Found $medias_count media items, processing... ";
                     $j=1;
                     foreach ($medias as $media) {
+                        if ($media->isRecordingDownloadAvailable==true && $media->mediaType=="Meeting") {
+
                             $media_file_name = date("Y-m-d", strtotime($media->startTime))."-".$media->name."-".$media->id.".mp4";
                             $media_file_name = preg_replace('/[^A-Za-z0-9\.\- ]/', '', $media_file_name);
                             $media_file_name = preg_replace('/[ ]/', '-', $media_file_name);
                             $channel_folder = preg_replace('/[ ]/', '-', $channel_folder);
                             $curlparms=[];
+                            $channel_mediaids[] = $media->id;
                             $curlparms["location"] = "https://$subdomain.vowel.com/api/meetings/$media->id/download";
                             $curlparms["output"] = "$channel_folder/$media_file_name";
                             $curlies[]=$curlparms;
                             echo "$j ";                 
                             $j++; 
+
+                        }
+
                     }
                     echo " done.\n";
 
@@ -125,29 +134,93 @@ try {
             }
 
         }
-        
-        
-        $curl_base = "curl -C - --parallel --create-dirs -H 'cookie: VSC1=$vsc1;' ";
 
-        $num_simul = 10;
-        $curl_downloads = "";
-        $k = 0;
 
-        foreach ($curlies as $parm) {
-            
-            $curl_downloads .= " --location ".$parm['location']." --output '".$parm['output']."'";
-            $k++;
+    }
 
-            if ($k % $num_simul == 0 || $k == count($curlies)) {
-                file_put_contents("vd.sh", "echo 'Starting $num_simul downloads...'\n$curl_base $curl_downloads\n", FILE_APPEND);
-                $curl_downloads = "";
+
+
+    // get all the meetings and filter out all of those that are in folders
+    echo "Getting all the meetings...\n";
+    $vdm_client = new \GuzzleHttp\Client();
+
+    $vdm_response = $vdm_client->request(
+        'GET',
+        'https://' . $subdomain . '.vowel.com/api/meetings/?size=10000',
+        [
+            'cookies' => $jar
+        ]
+    );
+
+    $vdm_response_code = $vdm_response->getStatusCode();
+    if ($vdm_response_code == 200) {
+
+        // get all the channels (folders)
+        $vdm_response_body = json_decode($vdm_response->getBody()->getContents());
+        $meetings = $vdm_response_body->_embedded->media;
+        $meeting_count = $vdm_response_body->page->totalElements;
+        echo "Found $meeting_count meetings in total.\nLet's see which are available to download, not in a folder...\n";
+        $l = 1;
+
+        foreach ($meetings as $meeting) {
+            // is it available?
+            if ($meeting->isRecordingDownloadAvailable==true) {
+
+                if (!in_array($meeting->id, $channel_mediaids)) {
+                    // if we don't find this meeting in our list, we should add it with a generic folder
+                    $media_file_name2 = date("Y-m-d", strtotime($meeting->startTime))."-".$meeting->name."-".$meeting->id.".mp4";
+                    $media_file_name2 = preg_replace('/[^A-Za-z0-9\.\- ]/', '', $media_file_name2);
+                    $media_file_name2 = preg_replace('/[ ]/', '-', $media_file_name2);
+                    $curlparms=[];
+                    $curlparms["location"] = "https://$subdomain.vowel.com/api/meetings/$meeting->id/download";
+                    $curlparms["output"] = "$downloadpath/No-Folder-Found/$media_file_name2";
+                    $curlies[]=$curlparms;
+                    echo "$l ";                 
+                    $l++; 
+
+                }
+
             }
 
         }
 
-        echo "Done.\nNow, you just have to run vd.sh and wait.\nDon't forget to chmod +x that file.\n";
+
+    }      
+
+    echo " additional videos found that were not in a folder.\n"  ;
+    
+
+    // write out the bash file
+    $curl_base = "curl -C - --parallel --create-dirs -H 'cookie: VSC1=$vsc1;' ";
+
+    $num_simul = 10;
+    $curl_downloads = "";
+    $k = 0;
+    $total_videos = count($curlies);
+    if (file_exists("vd.sh")) {
+        unlink("vd.sh");    
+    }
+    file_put_contents("vd.sh", "echo 'Downloading $total_videos Vowel videos in batches of $num_simul at a time...'\n", FILE_APPEND);
+
+    foreach ($curlies as $parm) {
+        
+        $curl_downloads .= " --location ".$parm['location']." --output '".$parm['output']."'";
+        $k++;
+
+        if ($k % $num_simul == 0 || $k == count($curlies)) {
+            file_put_contents("vd.sh", "$curl_base $curl_downloads\n", FILE_APPEND);
+            $curl_downloads = "";
+            file_put_contents("vd.sh", "echo 'Completed $k of $total_videos.'\n", FILE_APPEND);
+        }
+
 
     }
+
+    file_put_contents("vd.sh", "echo 'Congrats, you should have all your videos now. Peace!'\n", FILE_APPEND);
+    chmod("vd.sh", 0755);
+
+
+    echo "Done.\nNow, you just have to run vd.sh and wait.\n";    
 
 
 } catch (ClientException $e) {
